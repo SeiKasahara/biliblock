@@ -1,0 +1,39 @@
+# ---- OS ----
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
+
+# ---- 编辑器 / IDE ----
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ---- Node（本项目免构建，一般不会有；作预防）----
+node_modules/
+npm-debug.log*
+yarn-error.log*
+package-lock.json
+
+# ---- 日志 / 临时 ----
+*.log
+tmp/
+.cache/
+scratchpad/
+
+# ---- 本地环境 / 密钥 ----
+.env
+*.local
+secrets.json
+
+# ---- 打包产物 / 扩展签名私钥（切勿提交 .pem）----
+*.zip
+*.crx
+*.pem
+
+# ---- vendor 大二进制（ONNX Runtime wasm ~21MB）----
+# 默认忽略，克隆后按 vendor/README.md 重新拉取（transformers.min.js 与 .mjs 体积小，保留提交）。
+# 若想让 CLIP 开箱即用，把下面这行删掉，改为提交该 wasm。
+vendor/*.wasm

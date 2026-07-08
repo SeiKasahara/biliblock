@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BiliBlock 设置</title>
+  <link rel="stylesheet" href="options.css" />
+</head>
+<body>
+  <header class="top">
+    <span class="logo">🛡️</span>
+    <h1>BiliBlock · B站个人屏蔽助手</h1>
+    <label class="master">
+      <input type="checkbox" id="enabled" />
+      <span class="sw"></span>
+      <em>总开关</em>
+    </label>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab on" data-tab="general">常规</button>
+    <button class="tab" data-tab="blocklist">屏蔽名单</button>
+    <button class="tab" data-tab="rules">关键词/正则</button>
+    <button class="tab" data-tab="llm">大模型筛选</button>
+    <button class="tab" data-tab="examples">样例学习</button>
+    <button class="tab" data-tab="data">数据同步</button>
+  </nav>
+
+  <!-- 常规 -->
+  <section class="card" data-panel="general">
+    <h2>屏蔽强度</h2>
+    <div class="seg" id="levelSeg">
+      <button data-v="deep">深屏蔽 · 完全不可见（推荐）</button>
+      <button data-v="shallow">浅屏蔽 · 折叠为占位可展开</button>
+    </div>
+    <p class="desc">深屏蔽在数据返回时即剔除，无闪现；浅屏蔽会折叠成「已屏蔽·点击展开」的提示条。</p>
+
+    <h2>生效范围</h2>
+    <div class="scopes">
+      <label><input type="checkbox" data-scope="comments" /> 视频/动态 评论</label>
+      <label><input type="checkbox" data-scope="dynamics" /> 动态feed</label>
+      <label><input type="checkbox" data-scope="space" /> 用户空间投稿</label>
+      <label><input type="checkbox" data-scope="search" /> 搜索结果</label>
+      <label><input type="checkbox" data-scope="recommend" /> 首页/热门/相关推荐</label>
+      <label><input type="checkbox" data-scope="danmaku" /> 弹幕</label>
+    </div>
+    <p class="desc">屏蔽方式为本地过滤，<b>不占用B站官方拉黑名额</b>，对方无感知。</p>
+
+    <h2>图片评论查重（pHash · 本地）</h2>
+    <label class="ck"><input type="checkbox" id="imgPhash" /> 屏蔽与「已屏蔽图片」相同或极相似的图片评论</label>
+    <div class="grid" style="grid-template-columns:240px;margin-top:8px">
+      <label class="fld"><span>相似度阈值（汉明距离，越小越严，默认 10）</span><input type="number" id="imgThreshold" min="0" max="32" /></label>
+    </div>
+    <p class="desc">在评论区对图片评论点 🚫（屏蔽并学习）记入「黑图库」、点「✓ 这条正常」记入白库。<b>只存哈希、不存原图</b>，零额度、每图几毫秒；专治"同一张恶心图被反复发"。需读取 B站图片 CDN（hdslb.com）。<span id="imgStat"></span></p>
+    <div class="btnbar"><button id="clearImgBtn">清空图片黑/白库</button></div>
+
+    <h2>图片语义相似（CLIP · 本地 WebGPU · 进阶）</h2>
+    <label class="ck"><input type="checkbox" id="imgClip" /> 屏蔽与「已屏蔽图片」内容相似（非同一张）的图片评论</label>
+    <div class="grid" style="grid-template-columns:260px;margin-top:8px">
+      <label class="fld"><span>相似度阈值（余弦 0~1，越大越严，默认 0.85）</span><input type="number" id="clipThreshold" min="0.5" max="0.99" step="0.01" /></label>
+    </div>
+    <div class="btnbar">
+      <button id="warmClipBtn" class="primary">下载并预热本地模型</button>
+      <button id="clearVecBtn">清空图向量库</button>
+      <span class="desc" id="clipStat"></span>
+    </div>
+    <p class="desc">本地用 WebGPU 跑 CLIP 把图编码成向量，按"与你标过的黑/白图相似度"判定，能挡"同类但换了一张"的图。首次启用从 Hugging Face 下载模型（约几十 MB，缓存后离线），需授权访问 huggingface.co。比 pHash 重——<b>建议先用 pHash，不够再开这个</b>。全新、谁都不像的图交给上面的「识别配图（多模态）」云端兜底。</p>
+  </section>
+
+  <!-- 屏蔽名单 -->
+  <section class="card hidden" data-panel="blocklist">
+    <h2>屏蔽名单 <span class="count" id="blCount">0</span></h2>
+    <div class="addbar">
+      <input type="text" id="newUid" placeholder="输入 UID 或粘贴 space.bilibili.com 链接" />
+      <input type="text" id="newNote" placeholder="备注（可选）" class="note-in" />
+      <button id="addUidBtn" class="primary">添加</button>
+    </div>
+    <input type="search" id="blSearch" placeholder="🔍 搜索 UID / 昵称 / 备注" class="search" />
+    <div class="tablewrap">
+      <table id="blTable">
+        <thead><tr><th>UID</th><th>昵称</th><th>备注</th><th>添加时间</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="desc" id="blEmpty">名单为空。可在B站评论区点击昵称旁的 🚫，或右键用户空间链接快速添加。</p>
+  </section>
+
+  <!-- 关键词/正则 -->
+  <section class="card hidden" data-panel="rules">
+    <h2>关键词屏蔽</h2>
+    <p class="desc">每行一个关键词，评论/标题包含即屏蔽。零成本、零延迟，无需大模型。</p>
+    <textarea id="keywords" rows="6" placeholder="引战&#10;带节奏&#10;震惊"></textarea>
+
+    <h2>正则表达式</h2>
+    <p class="desc">每行一条 JavaScript 正则（不含首尾斜杠）。例如 <code>^.{0,2}$</code> 屏蔽过短评论。</p>
+    <textarea id="regexps" rows="4" placeholder="^\s*(哈){3,}\s*$&#10;点赞.{0,4}关注"></textarea>
+
+    <label class="ck"><input type="checkbox" id="caseSensitive" /> 区分大小写</label>
+  </section>
+
+  <!-- 大模型 -->
+  <section class="card hidden" data-panel="llm">
+    <h2>大模型自动筛选评论 <label class="master sm"><input type="checkbox" id="llmEnabled" /><span class="sw"></span></label></h2>
+    <p class="desc">自动扫描评论并按你的<b>自定义提示词</b>判断是否屏蔽。判定结果本地缓存，重复评论不再消耗额度。</p>
+
+    <div class="grid">
+      <label class="fld">
+        <span>服务商预设</span>
+        <select id="provider"></select>
+      </label>
+      <label class="fld">
+        <span>模型名</span>
+        <input type="text" id="model" placeholder="留空用预设默认" />
+      </label>
+      <label class="fld col2">
+        <span>接口地址（/chat/completions）</span>
+        <input type="text" id="endpoint" placeholder="留空用预设默认" />
+      </label>
+      <label class="fld col2">
+        <span>API Key <a id="keyLink" href="#" target="_blank" class="mini">获取</a></span>
+        <input type="password" id="apiKey" placeholder="本地 Ollama 可留空" />
+      </label>
+    </div>
+    <p class="desc" id="providerNote"></p>
+
+    <div class="btnbar">
+      <button id="grantBtn">授权访问该接口</button>
+      <button id="testBtn" class="primary">测试连接</button>
+      <span id="testResult" class="testres"></span>
+    </div>
+
+    <h2>自定义提示词（筛选标准）</h2>
+    <p class="desc">描述你不想看到的评论类型。模型会据此对每条评论输出 block:true/false。</p>
+    <textarea id="systemPrompt" rows="12"></textarea>
+    <button id="resetPrompt" class="mini-btn">恢复默认提示词</button>
+
+    <div class="grid adv">
+      <label class="fld"><span>每批评论数</span><input type="number" id="batchSize" min="1" max="50" /></label>
+      <label class="fld"><span>并发数</span><input type="number" id="maxConcurrent" min="1" max="5" /></label>
+      <label class="fld"><span>温度</span><input type="number" id="temperature" min="0" max="2" step="0.1" /></label>
+      <label class="fld"><span>最短文本长度</span><input type="number" id="minLen" min="0" max="50" /></label>
+      <label class="fld"><span>缓存天数</span><input type="number" id="cacheTtlDays" min="1" max="365" /></label>
+      <label class="fld ck2"><input type="checkbox" id="llmDanmaku" /><span>也用于弹幕</span></label>
+      <label class="fld ck2"><input type="checkbox" id="llmMultimodal" /><span>识别配图（多模态）</span></label>
+    </div>
+    <p class="desc">开启「识别配图」后，带图/纯图评论会连同图片交给<b>视觉模型</b>判断（每条单独请求）。模型需支持图片输入，如智谱 <code>glm-4v-flash</code>（免费）、<code>qwen-vl</code>、<code>gpt-4o</code> 等。</p>
+
+    <div class="btnbar">
+      <span class="desc" id="cacheStat"></span>
+      <button id="clearCacheBtn">清空判定缓存</button>
+    </div>
+  </section>
+
+  <!-- 样例学习 -->
+  <section class="card hidden" data-panel="examples">
+    <h2>样例学习（few-shot）<span class="count" id="exCount">0</span></h2>
+    <p class="desc">这里的样例会作为你「亲自标注」的参考，注入每次大模型请求，<b>优先级高于模型直觉</b>，用来纠正误屏蔽 / 漏屏蔽。也可以在评论区点 🚫（屏蔽并学习）自动记为「应屏蔽」，或对被误屏蔽的评论点「✓ 这条正常」直接添加。</p>
+    <div class="addbar">
+      <input type="text" id="exText" placeholder="粘贴一条评论样例文本" />
+      <select id="exLabel" style="max-width:120px">
+        <option value="block">应屏蔽</option>
+        <option value="allow">正常（不屏蔽）</option>
+      </select>
+      <button id="exAdd" class="primary">添加</button>
+    </div>
+    <div class="tablewrap">
+      <table id="exTable">
+        <thead><tr><th style="width:90px">类型</th><th>样例文本</th><th style="width:60px"></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="desc" id="exEmpty">还没有样例。屏蔽尺度全靠上面的提示词；加入样例后 AI 会更贴合你的口味。</p>
+    <div class="btnbar">
+      <button id="reevalBtn">清空 AI 缓存并重新评估当前页</button>
+      <span class="desc">已判定过的评论不会自动套用新样例；点此清缓存可让打开的页面按新样例重判（会重新消耗额度）。</span>
+    </div>
+  </section>
+
+  <!-- 数据 -->
+  <section class="card hidden" data-panel="data">
+    <h2>多设备同步</h2>
+    <p class="desc">名单与设置通过浏览器账号自动同步到你登录的其它设备（Chrome/Edge 同账号）。API Key 也会同步，介意可留空改用本地 Ollama。</p>
+    <h2>导入 / 导出</h2>
+    <div class="btnbar">
+      <button id="exportBtn" class="primary">导出为 JSON</button>
+      <button id="importMergeBtn">导入并合并</button>
+      <button id="importReplaceBtn">导入并覆盖</button>
+      <input type="file" id="importFile" accept="application/json,.json" hidden />
+    </div>
+    <p class="desc" id="dataMsg"></p>
+  </section>
+
+  <footer class="foot">BiliBlock v0.1.0 · 纯本地运行，数据不上传（大模型请求除外）</footer>
+
+  <script src="../src/common/crc32.js"></script>
+  <script src="../src/common/filter-core.js"></script>
+  <script src="../src/common/defaults.js"></script>
+  <script src="../src/common/store.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

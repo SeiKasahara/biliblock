@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="hd">
+    <span class="title">BiliBlock</span>
+    <label class="master">
+      <input type="checkbox" id="enabled" />
+      <span class="sw"></span>
+    </label>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><b id="pageCount">0</b><span>本页已屏蔽</span></div>
+    <div class="stat"><b id="listCount">0</b><span>名单人数</span></div>
+  </div>
+
+  <div class="row">
+    <span class="lbl">屏蔽强度</span>
+    <div class="seg" id="levelSeg">
+      <button data-v="deep" class="on">深（不可见）</button>
+      <button data-v="shallow">浅（可展开）</button>
+    </div>
+  </div>
+
+  <div class="group">
+    <div class="group-hd">自动屏蔽 <span class="tag">默认全关 · 手动屏蔽为主</span></div>
+
+    <div class="opt">
+      <div class="opt-txt"><b>相同图片自动屏蔽</b><span>本地免费 · 挡反复搬运的同一张图（pHash）</span></div>
+      <label class="master sm"><input type="checkbox" id="phash" /><span class="sw"></span></label>
+    </div>
+
+    <div class="opt">
+      <div class="opt-txt"><b>相似图片自动屏蔽</b><span>本地 · CLIP 挡同类恶心图，首次需下载模型</span></div>
+      <label class="master sm"><input type="checkbox" id="clip" /><span class="sw"></span></label>
+    </div>
+
+    <div class="opt">
+      <div class="opt-txt"><b>大模型筛选评论</b><span class="warn">⚠ 消耗 API token，注意用量</span></div>
+      <label class="master sm"><input type="checkbox" id="llm" /><span class="sw"></span></label>
+    </div>
+  </div>
+
+  <div class="hint" id="hint"></div>
+
+  <div class="add">
+    <input type="text" id="uid" placeholder="输入 UID 或粘贴空间链接，回车屏蔽" />
+    <button id="addBtn">屏蔽</button>
+  </div>
+
+  <div class="foot">
+    <button id="openOptions" class="link">⚙️ 设置与名单管理</button>
+    <span class="ver">v0.1.0</span>
+  </div>
+
+  <script src="../src/common/crc32.js"></script>
+  <script src="../src/common/filter-core.js"></script>
+  <script src="../src/common/defaults.js"></script>
+  <script src="../src/common/store.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
