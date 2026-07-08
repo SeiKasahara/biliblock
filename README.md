@@ -1,5 +1,9 @@
 <h1 align="center">BiliBlock</h1>
 
+<p align="center">
+  <img src="assets\rana.jpg" alt="rana">
+</p>
+
 <p align="center">B 站个人屏蔽助手</p>
 
 <p align="center">
