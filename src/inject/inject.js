@@ -17,6 +17,7 @@
     rules: { keywords: [], regexps: [], caseSensitive: false },
     scopes: {},
     llmEnabled: false,
+    cacheActive: false,
     cache: new Map(),
     dmHashes: new Set(), // 被屏蔽 uid 的 crc32，用于弹幕 midHash 匹配
   };
@@ -40,6 +41,7 @@
       state.rules = d.rules || state.rules;
       state.scopes = d.scopes || {};
       state.llmEnabled = !!d.llmEnabled;
+      state.cacheActive = d.cacheActive !== undefined ? !!d.cacheActive : !!d.llmEnabled;
       if (Array.isArray(d.cache)) {
         state.cache = new Map(d.cache);
       }
@@ -58,6 +60,7 @@
       rules: state.rules,
       scopes: state.scopes,
       llmEnabled: state.llmEnabled,
+      cacheActive: state.cacheActive,
       cache: state.cache,
     };
   }

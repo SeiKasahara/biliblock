@@ -51,6 +51,8 @@
       rules: S.rules,
       scopes: S.scopes,
       llmEnabled: !!S.llm.enabled,
+      // 缓存判定是否生效于 API 层：大模型 或 图片过滤 任一开启即可（否则深屏蔽下图片屏蔽只能 DOM 隐藏、会闪）
+      cacheActive: !!(S.llm.enabled || (S.imageFilter && (S.imageFilter.phash || S.imageFilter.clip))),
       cache: Array.from(S.cacheMem.entries()).slice(0, 8000),
     }, '*');
   }
@@ -241,6 +243,8 @@
       }
       if (text) await NS.store.addExample({ text: text, label: 'block' });
       learnImages(info, 'block');
+      // 学到新黑图且大模型关着时：清缓存重评，让本页已出现的相似图也回溯屏蔽（纯本地、零额度）
+      if (imgs.length && !S.llm.enabled) { try { NS.store.requestReeval(); } catch (e) {} }
       S.cacheMem.set(key, true);
       window.postMessage({ __bcp: 'cache', entries: [[key, true]] }, '*');
       if (info.el) applyBlock(info.el, info, info.uid ? 'UID' : (imgs.length && !text ? '图' : 'AI'));

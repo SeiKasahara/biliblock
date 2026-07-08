@@ -38,7 +38,11 @@ function serialize(fn) {
 }
 
 async function embedOne(url) {
-  const image = await RawImage.read(url);
+  // RawImage.read 内部会 fetch，无超时；加 12s 竞速，避免慢图/挂起的 CDN 卡死推理队列
+  const image = await Promise.race([
+    RawImage.read(url),
+    new Promise(function (_, rej) { setTimeout(function () { rej(new Error('image read timeout')); }, 12000); }),
+  ]);
   const inputs = await processor(image);
   const out = await model(inputs);
   const v = out.image_embeds.tolist()[0]; // 512 floats

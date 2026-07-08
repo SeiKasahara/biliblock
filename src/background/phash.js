@@ -67,6 +67,9 @@
     try { bmp = await createImageBitmap(blob); } catch (e) { return null; }
     const canvas = new OffscreenCanvas(N, N);
     const ctx = canvas.getContext('2d');
+    // 先铺白底：否则透明区域按黑处理，透明贴纸/表情会互相误判相似
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, N, N);
     ctx.drawImage(bmp, 0, 0, N, N);
     if (bmp.close) bmp.close();
     const data = ctx.getImageData(0, 0, N, N).data;

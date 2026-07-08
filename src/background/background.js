@@ -66,14 +66,14 @@ async function ensureOffscreen() {
   await creatingOffscreen;
   creatingOffscreen = null;
 }
-// 向 offscreen 发消息，带重试（覆盖其模块监听器尚未就绪的窗口）
+// 向 offscreen 发消息，带重试（覆盖其模块脚本尚未评估完、监听器未注册的冷启动窗口，约 7s）
 async function sendToOffscreen(msg) {
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 15; i++) {
     try {
       const r = await chrome.runtime.sendMessage(msg);
       if (r !== undefined) return r;
     } catch (e) { /* 监听器还没起来 */ }
-    await new Promise(function (res) { setTimeout(res, 300); });
+    await new Promise(function (res) { setTimeout(res, 500); });
   }
   return null;
 }
@@ -194,7 +194,7 @@ async function handleClassify(items) {
       if (vecs.black.length || vecs.white.length) {
         const thr = settings.imageFilter.clipThreshold || 0.85;
         for (const it of imgItems) {
-          const embs = await embedImages((it.images || []).slice(0, 2));
+          const embs = await embedImages((it.images || []).slice(0, 4)); // 与学习端一致，避免第3-4张图漏配
           let decided = null;
           for (const e of embs) {
             if (!e) continue;

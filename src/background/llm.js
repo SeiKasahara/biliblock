@@ -163,7 +163,7 @@
   async function classifyVision(items, rawCfg, examples) {
     const cfg = resolveCfg(rawCfg);
     if (!items.length) return {};
-    if (!cfg.endpoint) throw new Error('未配置 LLM 接口地址');
+    if (!cfg.endpoint) return {}; // 与文本路径一致：接口未配置则降级为空，不拖垮整批
     const out = {};
     let idx = 0;
     async function worker() {

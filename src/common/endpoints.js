@@ -8,7 +8,9 @@
     uid = F.uid(uid);
     if (uid && ctx.blocked.has(uid)) return true;
     if (F.matchRules(text, ctx.rules)) return true;
-    if (ctx.llmEnabled && (rpid || uid)) {
+    // 缓存判定（大模型 / pHash / CLIP 的结果）；cacheActive 兼容旧字段 llmEnabled
+    const active = ctx.cacheActive !== undefined ? ctx.cacheActive : ctx.llmEnabled;
+    if (active && (rpid || uid)) {
       const k = F.cacheKey(rpid, uid, text);
       if (ctx.cache.get(k) === true) return true;
     }
