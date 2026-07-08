@@ -266,6 +266,17 @@
       noteIn.placeholder = '点击备注';
       noteIn.addEventListener('change', function () { e.note = noteIn.value; NS.store.setBlocklist(blocklist); });
       noteTd.appendChild(noteIn);
+      // 每人屏蔽强度：默认（跟随全局）/ 深 / 浅
+      const lvTd = document.createElement('td');
+      const lvSel = document.createElement('select');
+      lvSel.innerHTML = '<option value="">默认</option><option value="deep">深</option><option value="shallow">浅</option>';
+      lvSel.value = (e.level === 'deep' || e.level === 'shallow') ? e.level : '';
+      lvSel.style.cssText = 'padding:3px 4px;font-size:12px';
+      lvSel.addEventListener('change', async function () {
+        if (this.value) e.level = this.value; else delete e.level;
+        blocklist = await NS.store.setBlockLevel(e.uid, this.value);
+      });
+      lvTd.appendChild(lvSel);
       const dateTd = document.createElement('td'); dateTd.textContent = fmtDate(e.addedAt);
       const rmTd = document.createElement('td');
       const rm = document.createElement('button'); rm.className = 'rm'; rm.textContent = '移除';
@@ -273,7 +284,7 @@
         blocklist = await NS.store.removeBlock(e.uid); renderTable();
       });
       rmTd.appendChild(rm);
-      tr.append(uidTd, nameTd, noteTd, dateTd, rmTd);
+      tr.append(uidTd, nameTd, noteTd, lvTd, dateTd, rmTd);
       tbody.appendChild(tr);
     });
   }

@@ -67,10 +67,25 @@
       note: entry.note || (idx >= 0 ? list[idx].note : '') || '',
       addedAt: idx >= 0 ? list[idx].addedAt : Date.now(),
     };
+    // 每人的屏蔽强度覆盖（'deep'/'shallow'）；不设则跟随全局默认
+    const lv = entry.level !== undefined ? entry.level : (idx >= 0 ? list[idx].level : undefined);
+    if (lv === 'deep' || lv === 'shallow') rec.level = lv;
     if (idx >= 0) list[idx] = rec;
     else list.unshift(rec);
     await setBlocklist(list);
     return { list: list, added: idx < 0 };
+  }
+
+  // 设置/清除某人的屏蔽强度覆盖（level 传 'deep'/'shallow'，其它值=跟随默认）
+  async function setBlockLevel(uid, level) {
+    uid = NS.filter.uid(uid);
+    const list = await getBlocklist();
+    const e = list.find(function (x) { return NS.filter.uid(x.uid) === uid; });
+    if (!e) return list;
+    if (level === 'deep' || level === 'shallow') e.level = level;
+    else delete e.level;
+    await setBlocklist(list);
+    return list;
   }
 
   async function removeBlock(uid) {
@@ -296,7 +311,7 @@
 
   NS.store = {
     getSettings, setSettings,
-    getBlocklist, setBlocklist, addBlock, removeBlock,
+    getBlocklist, setBlocklist, addBlock, removeBlock, setBlockLevel,
     getCache, putCache, clearCache, cacheStats, lookupCache,
     getExamples, setExamples, addExample, removeExample, clearExamples, requestReeval,
     getImgHashes, addImgHashes, clearImgHashes, imgHashStats,

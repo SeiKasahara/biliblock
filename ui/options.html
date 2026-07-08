@@ -28,12 +28,12 @@
 
   <!-- 常规 -->
   <section class="card" data-panel="general">
-    <h2>屏蔽强度</h2>
+    <h2>默认屏蔽强度</h2>
     <div class="seg" id="levelSeg">
       <button data-v="deep">深屏蔽 · 完全不可见（推荐）</button>
       <button data-v="shallow">浅屏蔽 · 折叠为占位可展开</button>
     </div>
-    <p class="desc">深屏蔽在数据返回时即剔除，无闪现；浅屏蔽会折叠成「已屏蔽·点击展开」的提示条。</p>
+    <p class="desc">深屏蔽在数据返回时即剔除，无闪现；浅屏蔽会折叠成「已屏蔽·点击展开」的提示条。此为<b>默认值</b>（也用于关键词/大模型屏蔽）；在「屏蔽名单」里可为<b>每个人单独</b>设深/浅。</p>
 
     <h2>生效范围</h2>
     <div class="scopes">
@@ -78,7 +78,7 @@
     <input type="search" id="blSearch" placeholder="🔍 搜索 UID / 昵称 / 备注" class="search" />
     <div class="tablewrap">
       <table id="blTable">
-        <thead><tr><th>UID</th><th>昵称</th><th>备注</th><th>添加时间</th><th></th></tr></thead>
+        <thead><tr><th>UID</th><th>昵称</th><th>备注</th><th>强度</th><th>添加时间</th><th></th></tr></thead>
         <tbody></tbody>
       </table>
     </div>

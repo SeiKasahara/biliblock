@@ -12,6 +12,7 @@
     llm: { enabled: false, batchSize: 15, minLen: 1 },
     imageFilter: { phash: false, threshold: 10 },
     blocked: new Set(),
+    uidLevel: new Map(), // uid -> 'deep'|'shallow'（每人强度覆盖，缺省跟随全局 S.level）
     cacheMem: new Map(), // key -> bool（LLM 判定）
     inflight: new Set(),
     queue: [],
@@ -31,11 +32,22 @@
     S.imageFilter = s.imageFilter || { phash: false, threshold: 10 };
   }
 
+  // 某 uid 的有效屏蔽强度：有个人覆盖用覆盖，否则跟随全局默认
+  function effLevel(uid) { return S.uidLevel.get(F.uid(uid)) || S.level; }
+
+  function loadBlockedFrom(bl) {
+    S.blocked = new Set(bl.map(function (e) { return F.uid(e.uid); }));
+    S.uidLevel = new Map();
+    bl.forEach(function (e) {
+      if (e.level === 'deep' || e.level === 'shallow') S.uidLevel.set(F.uid(e.uid), e.level);
+    });
+  }
+
   async function load() {
     S.settings = await NS.store.getSettings();
     applySettings();
     const bl = await NS.store.getBlocklist();
-    S.blocked = new Set(bl.map(function (e) { return F.uid(e.uid); }));
+    loadBlockedFrom(bl);
     const cache = await NS.store.getCache();
     S.cacheMem = new Map(Object.keys(cache).map(function (k) { return [k, !!cache[k].b]; }));
     pushConfig();
@@ -43,11 +55,13 @@
   }
 
   function pushConfig() {
+    const uids = Array.from(S.blocked);
     window.postMessage({
       __bcp: 'cfg',
       enabled: S.enabled,
-      blockLevel: S.level,
-      uids: Array.from(S.blocked),
+      globalDeep: S.level === 'deep',
+      uids: uids, // 全部被屏蔽 uid（弹幕按 uid 剔除，无深浅之分）
+      deepUids: uids.filter(function (u) { return effLevel(u) === 'deep'; }), // 仅"深"的在 API 层剔除
       rules: S.rules,
       scopes: S.scopes,
       llmEnabled: !!S.llm.enabled,
@@ -58,11 +72,13 @@
   }
 
   // ---------------- 屏蔽 / 恢复 表现 ----------------
-  function applyBlock(el, info, reason) {
+  // level 省略时用全局 S.level；UID 屏蔽会传入该用户的个人强度
+  function applyBlock(el, info, reason, level) {
+    level = level || S.level;
     const prev = S.hidden.get(el);
-    if (prev && prev.reason === reason && prev.level === S.level) return;
+    if (prev && prev.reason === reason && prev.level === level) return;
     if (prev) unhide(el);
-    if (S.level === 'deep') {
+    if (level === 'deep') {
       el.style.setProperty('display', 'none', 'important');
       el.setAttribute('data-bcp-hidden', reason);
       S.hidden.set(el, { reason: reason, level: 'deep', ph: null });
@@ -132,7 +148,7 @@
       { icon: '🚫', title: '屏蔽并学习：拉黑此用户 + 记住这条内容（图片会挡相似图）', onClick: blockAndLearn },
     ]);
     const uid = info.uid ? F.uid(info.uid) : '';
-    if (uid && S.blocked.has(uid)) return applyBlock(info.el, info, 'UID');
+    if (uid && S.blocked.has(uid)) return applyBlock(info.el, info, 'UID', effLevel(uid));
     if (F.matchRules(info.text, S.rules)) return applyBlock(info.el, info, '关键词');
     const imgs = info.images || [];
     const imgFilterOn = !!(imgs.length && S.imageFilter && (S.imageFilter.phash || S.imageFilter.clip));
@@ -151,7 +167,7 @@
     // 卡片过滤总开关：任一「卡片类」范围开启才生效；全关则恢复已隐藏卡片
     if (!cardScopesOn()) { if (S.hidden.has(info.el)) unhide(info.el); return; }
     const uid = info.uid ? F.uid(info.uid) : '';
-    if (uid && S.blocked.has(uid)) return applyBlock(info.el, info, 'UID');
+    if (uid && S.blocked.has(uid)) return applyBlock(info.el, info, 'UID', effLevel(uid));
     if (F.matchRules(info.text, S.rules)) return applyBlock(info.el, info, '关键词');
     if (S.hidden.has(info.el)) unhide(info.el);
   }
@@ -247,7 +263,7 @@
       if (imgs.length && !S.llm.enabled) { try { NS.store.requestReeval(); } catch (e) {} }
       S.cacheMem.set(key, true);
       window.postMessage({ __bcp: 'cache', entries: [[key, true]] }, '*');
-      if (info.el) applyBlock(info.el, info, info.uid ? 'UID' : (imgs.length && !text ? '图' : 'AI'));
+      if (info.el) applyBlock(info.el, info, info.uid ? 'UID' : (imgs.length && !text ? '图' : 'AI'), info.uid ? effLevel(info.uid) : undefined);
       scan();
       toast(imgs.length ? '已屏蔽，并记住这张图（相似图也会挡）'
         : '已屏蔽' + (info.name ? '「' + info.name + '」' : '') + '，并学习这类评论');
@@ -345,7 +361,7 @@
 
   async function reloadBlocklist() {
     const bl = await NS.store.getBlocklist();
-    S.blocked = new Set(bl.map(function (e) { return F.uid(e.uid); }));
+    loadBlockedFrom(bl);
     pushConfig();
     revalidateAll();
   }

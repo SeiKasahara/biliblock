@@ -11,9 +11,10 @@
 
   const state = {
     enabled: false,
-    active: false, // enabled 且 blockLevel==='deep' 时才在 API 层剔除（浅屏蔽交给 DOM 折叠）
-    blockLevel: 'deep',
-    blocked: new Set(),
+    active: false, // 有"深"屏蔽的人 或 全局深 时，才在 API 层剔除（浅屏蔽交给 DOM 折叠）
+    globalDeep: true,
+    allUids: new Set(),  // 全部被屏蔽 uid（弹幕无深浅之分，一律剔除）
+    deepUids: new Set(), // 强度为"深"的 uid（只有这些在 API 层剔除评论/卡片）
     rules: { keywords: [], regexps: [], caseSensitive: false },
     scopes: {},
     llmEnabled: false,
@@ -25,7 +26,7 @@
   function rebuildDmHashes() {
     state.dmHashes = new Set();
     if (!CRC) return;
-    state.blocked.forEach(function (uid) {
+    state.allUids.forEach(function (uid) {
       state.dmHashes.add(CRC.hex(uid));
     });
   }
@@ -35,9 +36,10 @@
     const d = ev.data;
     if (d.__bcp === 'cfg') {
       state.enabled = !!d.enabled;
-      state.blockLevel = d.blockLevel || 'deep';
-      state.active = state.enabled && state.blockLevel === 'deep';
-      state.blocked = new Set((d.uids || []).map(String));
+      state.globalDeep = d.globalDeep !== undefined ? !!d.globalDeep : (d.blockLevel !== 'shallow');
+      state.allUids = new Set((d.uids || []).map(String));
+      state.deepUids = new Set((d.deepUids || d.uids || []).map(String));
+      state.active = state.enabled && (state.globalDeep || state.deepUids.size > 0);
       state.rules = d.rules || state.rules;
       state.scopes = d.scopes || {};
       state.llmEnabled = !!d.llmEnabled;
@@ -56,7 +58,8 @@
 
   function ctx() {
     return {
-      blocked: state.blocked,
+      blocked: state.deepUids,           // API 层只剔除"深"屏蔽的人
+      applyRulesCache: state.globalDeep, // 关键词/缓存判定仅在全局深时于 API 层剔除（浅时交给 DOM）
       rules: state.rules,
       scopes: state.scopes,
       llmEnabled: state.llmEnabled,
