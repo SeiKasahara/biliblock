@@ -40,6 +40,9 @@ body {
 .opt-txt b { font-size: 13px; font-weight: 500; }
 .opt-txt span { font-size: 11px; color: #9499a0; }
 .opt-txt .warn { color: #e8a33d; }
+.semrow { display: flex; align-items: center; gap: 10px; padding: 6px 0 2px; }
+.semrow input[type=range] { flex: 1; accent-color: #fb7299; }
+.semval { font-size: 13px; color: #fb7299; min-width: 30px; text-align: right; font-variant-numeric: tabular-nums; }
 
 .add { display: flex; gap: 6px; margin: 6px 0 4px; }
 .add input { flex: 1; border: 1px solid #e3e5e7; border-radius: 6px; padding: 7px 9px; font-size: 13px; outline: none; }

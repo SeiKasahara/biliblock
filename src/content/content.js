@@ -11,6 +11,7 @@
     scopes: {},
     llm: { enabled: false, batchSize: 15, minLen: 1 },
     imageFilter: { phash: false, threshold: 10 },
+    semantic: { threshold: 0, minSamples: 5 },
     blocked: new Set(),
     uidLevel: new Map(), // uid -> 'deep'|'shallow'（每人强度覆盖，缺省跟随全局 S.level）
     cacheMem: new Map(), // key -> bool（LLM 判定）
@@ -30,6 +31,7 @@
     S.scopes = s.scopes;
     S.llm = s.llm;
     S.imageFilter = s.imageFilter || { phash: false, threshold: 10 };
+    S.semantic = s.semantic || { threshold: 0, minSamples: 5 };
   }
 
   // 某 uid 的有效屏蔽强度：有个人覆盖用覆盖，否则跟随全局默认
@@ -65,8 +67,8 @@
       rules: S.rules,
       scopes: S.scopes,
       llmEnabled: !!S.llm.enabled,
-      // 缓存判定是否生效于 API 层：大模型 或 图片过滤 任一开启即可（否则深屏蔽下图片屏蔽只能 DOM 隐藏、会闪）
-      cacheActive: !!(S.llm.enabled || (S.imageFilter && (S.imageFilter.phash || S.imageFilter.clip))),
+      // 缓存判定是否生效于 API 层：大模型 / 图片过滤 / 语义聚类 任一开启即可
+      cacheActive: !!(S.llm.enabled || (S.imageFilter && (S.imageFilter.phash || S.imageFilter.clip)) || (S.semantic && S.semantic.threshold > 0)),
       cache: Array.from(S.cacheMem.entries()).slice(0, 8000),
     }, '*');
   }
@@ -152,12 +154,13 @@
     if (F.matchRules(info.text, S.rules)) return applyBlock(info.el, info, '关键词');
     const imgs = info.images || [];
     const imgFilterOn = !!(imgs.length && S.imageFilter && (S.imageFilter.phash || S.imageFilter.clip));
-    if (S.llm.enabled || imgFilterOn) {
+    const semOn = !!(S.semantic && S.semantic.threshold > 0 && (info.text || '').trim().length >= 2);
+    if (S.llm.enabled || imgFilterOn || semOn) {
       const key = classifyKey(info);
       const v = S.cacheMem.get(key);
       const imgReason = imgs.length && !(info.text || '').trim() ? '图' : 'AI';
       if (v === true) return applyBlock(info.el, info, imgReason);
-      const hasContent = (info.text || '').length >= (S.llm.minLen || 1) || (S.llm.multimodal && imgs.length > 0) || imgFilterOn;
+      const hasContent = (info.text || '').length >= (S.llm.minLen || 1) || (S.llm.multimodal && imgs.length > 0) || imgFilterOn || semOn;
       if (v === undefined && hasContent) enqueue(key, info);
     }
     if (S.hidden.has(info.el)) unhide(info.el);

@@ -130,6 +130,12 @@
       clip: false,      // 第2层 CLIP 图向量：屏蔽与黑图「语义相似」的图片评论（WebGPU 本地推理）
       clipThreshold: 0.80, // 余弦相似度阈值，越小越宽松（默认放宽）
     },
+    // 语义聚类屏蔽（文本）：本地 WebGPU 文本 embedding + 最近邻。
+    // 评论与「屏蔽样例」的语义距离低于 threshold 即自动屏蔽；0=关闭；样例少于 minSamples 则禁用。
+    semantic: {
+      threshold: 0,
+      minSamples: 5,
+    },
     version: 1,
   };
 

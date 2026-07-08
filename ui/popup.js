@@ -27,7 +27,47 @@
     const bl = await NS.store.getBlocklist();
     $('listCount').textContent = bl.length;
     updatePageCount();
+    refreshSemantic();
   }
+
+  // 语义相似屏蔽：阈值滑块 + 样例是否充足
+  async function refreshSemantic() {
+    if (!settings.semantic) settings.semantic = { threshold: 0, minSamples: 5 };
+    const th = settings.semantic.threshold || 0;
+    $('semThreshold').value = th;
+    $('semVal').textContent = th > 0 ? th.toFixed(2) : '关';
+    const ex = await NS.store.getExamples();
+    const blockN = ex.filter(function (e) { return e.label === 'block'; }).length;
+    const min = settings.semantic.minSamples || 5;
+    const enough = blockN >= min;
+    $('semTag').textContent = enough ? ('样例 ' + blockN) : ('样例不足 ' + blockN + '/' + min);
+    $('semTag').style.color = enough ? '' : '#e8a33d';
+    $('semThreshold').disabled = !enough;
+  }
+  let semReq = false;
+  $('semThreshold').addEventListener('input', function () {
+    const v = Number(this.value);
+    if (!settings.semantic) settings.semantic = { threshold: 0, minSamples: 5 };
+    settings.semantic.threshold = v;
+    $('semVal').textContent = v > 0 ? v.toFixed(2) : '关';
+    save();
+  });
+  $('semThreshold').addEventListener('change', async function () {
+    // 首次开启（>0）时申请 HF 权限并后台预热文本模型
+    if (Number(this.value) > 0 && !semReq) {
+      semReq = true;
+      const ok = await chrome.permissions.request({
+        origins: ['https://huggingface.co/*', 'https://*.huggingface.co/*', 'https://*.hf.co/*'],
+      }).catch(function () { return false; });
+      if (!ok) { hint('未授权 huggingface.co，语义屏蔽无法下载模型', 'err'); return; }
+      hint('正在后台下载/预热文本模型…', 'ok');
+      chrome.runtime.sendMessage({ type: 'warmText' }, function (r) {
+        if (chrome.runtime.lastError) return;
+        if (r && r.ok) hint('文本模型就绪（' + (r.backend || '') + '）', 'ok');
+        else hint('模型加载失败：' + ((r && r.error) || '详见设置'), 'err');
+      });
+    }
+  });
 
   // 本页已屏蔽计数：AI 分类是异步的（页面加载后几秒才陆续判完），
   // 弹窗打开期间轮询刷新，才能实时反映 AI 后续屏蔽的条数。

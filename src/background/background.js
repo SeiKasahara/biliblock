@@ -87,6 +87,32 @@ async function embedImages(urls) {
     return urls.map(function () { return null; });
   }
 }
+async function embedTexts(texts) {
+  if (!texts || !texts.length) return [];
+  try {
+    await ensureOffscreen();
+    const res = await sendToOffscreen({ target: 'offscreen', type: 'embedText', texts: texts });
+    return (res && res.vectors) || texts.map(function () { return null; });
+  } catch (e) {
+    return texts.map(function () { return null; });
+  }
+}
+// 缓存「屏蔽/正常」样例的文本向量（按样例内容签名，变了才重算）
+let semCache = { key: null, block: [], allow: [] };
+async function sampleVectors(examples) {
+  const blockTexts = examples.filter(function (e) { return e.label === 'block'; }).map(function (e) { return e.text; });
+  const allowTexts = examples.filter(function (e) { return e.label === 'allow'; }).map(function (e) { return e.text; });
+  const key = 'B' + blockTexts.join('') + '|A' + allowTexts.join('');
+  if (semCache.key === key) return semCache;
+  const all = blockTexts.concat(allowTexts);
+  const vecs = all.length ? await embedTexts(all) : [];
+  semCache = {
+    key: key,
+    block: vecs.slice(0, blockTexts.length).filter(Boolean),
+    allow: vecs.slice(blockTexts.length).filter(Boolean),
+  };
+  return semCache;
+}
 function cosine(a, b) {
   let dot = 0, na = 0, nb = 0;
   for (let i = 0; i < a.length; i++) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
@@ -102,9 +128,10 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
   if (!msg) return false;
   if (msg.target === 'offscreen') return false; // 交给 offscreen 处理
 
-  if (msg.type === 'warmClip') {
+  if (msg.type === 'warmClip' || msg.type === 'warmText') {
+    const inner = msg.type === 'warmText' ? 'warmText' : 'warm';
     ensureOffscreen()
-      .then(function () { return sendToOffscreen({ target: 'offscreen', type: 'warm' }); })
+      .then(function () { return sendToOffscreen({ target: 'offscreen', type: inner }); })
       .then(function (r) { sendResponse(r || { ok: false, error: '本地模型无响应' }); })
       .catch(function (e) { sendResponse({ ok: false, error: String((e && e.message) || e) }); });
     return true;
@@ -162,7 +189,8 @@ async function handleClassify(items) {
   const llmOn = !!(settings.llm && settings.llm.enabled);
   const phashOn = !!(settings.imageFilter && settings.imageFilter.phash);
   const clipOn = !!(settings.imageFilter && settings.imageFilter.clip);
-  if (!llmOn && !phashOn && !clipOn) return { decisions: {} };
+  const semOn = !!(settings.semantic && settings.semantic.threshold > 0);
+  if (!llmOn && !phashOn && !clipOn && !semOn) return { decisions: {} };
 
   const ids = items.map(function (i) { return i.id; });
   const look = await NS.store.lookupCache(ids, settings.llm.cacheTtlDays);
@@ -206,6 +234,32 @@ async function handleClassify(items) {
           if (decided !== null) fresh[it.id] = decided;
         }
         missItems = missItems.filter(function (i) { return !(i.id in fresh); });
+      }
+    }
+  }
+
+  // 语义聚类屏蔽（文本）：本地 embedding + 最近邻。距离 < 阈值 且更像"屏蔽样例"则屏蔽。
+  if (semOn) {
+    const sem = settings.semantic;
+    const examples = await NS.store.getExamples();
+    const blockCount = examples.filter(function (e) { return e.label === 'block'; }).length;
+    if (blockCount >= (sem.minSamples || 5)) {
+      const textItems = missItems.filter(function (i) {
+        return !(i.images && i.images.length) && (i.text || '').trim().length >= 2;
+      });
+      if (textItems.length) {
+        const sv = await sampleVectors(examples);
+        if (sv.block.length) {
+          const embs = await embedTexts(textItems.map(function (i) { return (i.text || '').slice(0, 300); }));
+          textItems.forEach(function (it, idx) {
+            const v = embs[idx];
+            if (!v) return;
+            const simB = maxCos(v, sv.block);
+            const simA = sv.allow.length ? maxCos(v, sv.allow) : -1;
+            if ((1 - simB) < sem.threshold && simB >= simA) fresh[it.id] = true;
+          });
+          missItems = missItems.filter(function (i) { return !(i.id in fresh); });
+        }
       }
     }
   }

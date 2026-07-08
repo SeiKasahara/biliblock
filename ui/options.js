@@ -42,8 +42,12 @@
     $('imgThreshold').value = (settings.imageFilter && settings.imageFilter.threshold) || 10;
     $('imgClip').checked = !!(settings.imageFilter && settings.imageFilter.clip);
     $('clipThreshold').value = (settings.imageFilter && settings.imageFilter.clipThreshold) || 0.85;
+    if (!settings.semantic) settings.semantic = { threshold: 0, minSamples: 5 };
+    $('semThreshold2').value = settings.semantic.threshold || 0;
+    $('semMinSamples').value = settings.semantic.minSamples || 5;
     updateImgStat();
     updateClipStat();
+    updateSemStat();
     $('keywords').value = (settings.rules.keywords || []).join('\n');
     $('regexps').value = (settings.rules.regexps || []).join('\n');
     $('caseSensitive').checked = !!settings.rules.caseSensitive;
@@ -157,6 +161,34 @@
   async function updateClipStat() {
     const s = await NS.store.imgVecStats();
     $('clipStat').textContent = ' 当前图向量：黑 ' + s.black + '、白 ' + s.white + '。';
+  }
+
+  // 语义相似屏蔽（文本）
+  function ensureSemantic() { if (!settings.semantic) settings.semantic = { threshold: 0, minSamples: 5 }; }
+  $('semThreshold2').addEventListener('input', function () {
+    ensureSemantic(); settings.semantic.threshold = Number(this.value) || 0; saveSettings();
+  });
+  $('semMinSamples').addEventListener('input', function () {
+    ensureSemantic(); settings.semantic.minSamples = Number(this.value) || 5; saveSettings(); updateSemStat();
+  });
+  $('warmTextBtn').addEventListener('click', async function () {
+    const ok = await requestHfPermission();
+    if (!ok) { $('semStat').textContent = '需要授权访问 huggingface.co'; return; }
+    $('semStat').textContent = '正在加载文本模型（首次需下载，约 24MB）…';
+    chrome.runtime.sendMessage({ type: 'warmText' }, function (r) {
+      if (chrome.runtime.lastError) { $('semStat').textContent = '后台无响应：' + chrome.runtime.lastError.message; return; }
+      if (!r || !r.ok) { $('semStat').textContent = '加载失败：' + (r && r.error || '未知错误'); return; }
+      $('semStat').textContent = '文本模型就绪（后端：' + (r.backend || '?') + '）。';
+    });
+  });
+  async function updateSemStat() {
+    ensureSemantic();
+    const ex = await NS.store.getExamples();
+    const blockN = ex.filter(function (e) { return e.label === 'block'; }).length;
+    const min = settings.semantic.minSamples || 5;
+    $('semStat').textContent = blockN >= min
+      ? ('「屏蔽」样例 ' + blockN + ' 条，已满足最少 ' + min + ' 条')
+      : ('「屏蔽」样例仅 ' + blockN + ' 条 < ' + min + '，功能禁用中（去「样例学习」或点 🚫 积累）');
   }
 
   // ---------- 规则事件 ----------
@@ -387,7 +419,7 @@
   chrome.storage.onChanged.addListener(function (changes, area) {
     if (area === 'sync') {
       if (Object.keys(changes).some(function (k) { return k.indexOf('bl:') === 0; })) loadBlocklist();
-      if (changes.bcp_examples) loadExamples();
+      if (changes.bcp_examples) { loadExamples(); updateSemStat(); }
       if (changes.bcp_imgblack || changes.bcp_imgwhite) updateImgStat();
     } else if (area === 'local') {
       if (changes.bcp_imgvec) updateClipStat();

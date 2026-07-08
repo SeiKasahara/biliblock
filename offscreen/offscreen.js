@@ -1,6 +1,6 @@
 // Offscreen document：用 WebGPU + transformers.js 跑 CLIP 图像编码，产出 512 维向量。
 // Service Worker 没有 WebGPU，故推理放这里；SW 通过 runtime 消息驱动。
-import { env, AutoProcessor, CLIPVisionModelWithProjection, RawImage } from '../vendor/transformers.min.js';
+import { env, AutoProcessor, CLIPVisionModelWithProjection, RawImage, pipeline } from '../vendor/transformers.min.js';
 
 // 运行时全部走本地 vendor/，模型权重从 HF 远程拉并由 Cache API 缓存
 env.allowLocalModels = false;
@@ -27,6 +27,30 @@ async function load() {
     })().catch(function (e) { loading = null; throw e; });
   }
   await loading;
+}
+
+// ---- 文本 embedding（中文，用于语义聚类屏蔽）----
+const TEXT_MODEL = 'Xenova/bge-small-zh-v1.5';
+let textExtractor = null, textLoading = null, textBackend = '';
+async function loadText() {
+  if (textExtractor) return;
+  if (!textLoading) {
+    textLoading = (async () => {
+      try {
+        textExtractor = await pipeline('feature-extraction', TEXT_MODEL, { device: 'webgpu', dtype: 'q8' });
+        textBackend = 'webgpu';
+      } catch (e) {
+        textExtractor = await pipeline('feature-extraction', TEXT_MODEL, { device: 'wasm', dtype: 'q8' });
+        textBackend = 'wasm';
+      }
+    })().catch(function (e) { textLoading = null; throw e; });
+  }
+  await textLoading;
+}
+async function embedTexts(texts) {
+  await loadText();
+  const out = await textExtractor(texts, { pooling: 'mean', normalize: true });
+  return out.tolist(); // [n][dim] 已 L2 归一化
 }
 
 // 串行化推理：ORT 会话不可并发 run()，把重叠的 embed 请求排队执行
@@ -59,6 +83,24 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
   if (msg.type === 'warm') {
     load().then(function () { sendResponse({ ok: true, backend: backend }); })
       .catch(function (e) { sendResponse({ ok: false, error: String((e && e.message) || e) }); });
+    return true;
+  }
+
+  if (msg.type === 'warmText') {
+    loadText().then(function () { sendResponse({ ok: true, backend: textBackend }); })
+      .catch(function (e) { sendResponse({ ok: false, error: String((e && e.message) || e) }); });
+    return true;
+  }
+
+  if (msg.type === 'embedText') {
+    serialize(async function () {
+      try {
+        const vectors = await embedTexts(msg.texts || []);
+        sendResponse({ ok: true, backend: textBackend, vectors: vectors });
+      } catch (e) {
+        sendResponse({ ok: false, error: String((e && e.message) || e), vectors: (msg.texts || []).map(function () { return null; }) });
+      }
+    });
     return true;
   }
 
