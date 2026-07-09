@@ -78,7 +78,7 @@
 
 **带图评论**可勾选「识别配图（多模态）」，连图片交给视觉模型判断。
 
-## 本地模型（WebGPU）
+## 本地模型（WebGPU/WASM）
 
 第②层（语义文本、图片 CLIP）在浏览器本地用 WebGPU 跑 [Transformers.js](https://github.com/huggingface/transformers.js)：
 
@@ -110,14 +110,6 @@
 
 每一项都可在设置页单独开关。
 
-## 工作原理
-
-三处协作，共用同一份名单与样例：
-
-1. **接口拦截（主世界）**：`document_start` 劫持 `window.fetch`，在 B 站接口返回时就剔除被屏蔽 UID 的数据（深屏蔽无闪现）；弹幕解析 `seg.so` protobuf，用 `CRC32(uid)` 匹配 `midHash` 丢弃。
-2. **DOM 兜底（隔离世界）**：穿透 Shadow DOM 扫描评论与卡片，按 UID / 关键词判隐藏或折叠、注入 🚫 按钮，并把文本/图片评论送去后台分类。
-3. **后台分类（Service Worker + offscreen）**：三层文本、三层图片、缓存判定；WebGPU 推理在 offscreen document 完成。名单/设置存 `chrome.storage.sync`（分片）多端同步。
-
 ## 目录结构
 
 ```
@@ -132,14 +124,6 @@ ui/            popup（弹窗）· options（设置与名单）
 docs/          local-model-research（本地模型选型与算法调研）
 pack.ps1       打包为可安装 zip
 ```
-
-## 打包发布
-
-```powershell
-powershell -ExecutionPolicy Bypass -File pack.ps1
-```
-
-在 `release/` 生成安装 zip（manifest 在压缩包根部、含 vendor wasm、正斜杠路径可跨平台）。解压后「加载已解压的扩展程序」，或上传 Chrome 应用商店。
 
 ## 隐私
 
