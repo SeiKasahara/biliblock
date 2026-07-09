@@ -85,7 +85,6 @@
 - 运行时依赖（Transformers.js + ONNX Runtime wasm）放在 `vendor/`（wasm 较大，`.gitignore` 默认忽略，按 `vendor/README.md` 拉取）。
 - 模型权重首次从 Hugging Face 下载并由浏览器缓存（文本 `bge-small-zh` ~24MB、图片 `clip-vit-base-patch32`）；启用时需授权 `huggingface.co`。
 - 推理放在 **offscreen document**（MV3 的 Service Worker 无 WebGPU），失败自动回退 wasm、再不行则该层静默降级，不影响其它屏蔽。
-- **算法要点**：文本 embedding 有强各向异性（不相关句子余弦也 0.5+），故先**按批次去均值**消除公共方向，再 **kNN + 置信度门槛（比正常基线高多少才屏蔽）** 抗小样本误伤——这是能把「正常评论」和「刷屏」在真实数据上拉开的关键。设计与实测见 [`docs/local-model-research.md`](docs/local-model-research.md)。
 
 ## 降低误杀
 
