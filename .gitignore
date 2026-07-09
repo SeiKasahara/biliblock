@@ -39,3 +39,5 @@ pack.ps1
 # 默认忽略，克隆后按 vendor/README.md 重新拉取（transformers.min.js 与 .mjs 体积小，保留提交）。
 # 若想让 CLIP 开箱即用，把下面这行删掉，改为提交该 wasm。
 vendor/*.wasm
+
+test/

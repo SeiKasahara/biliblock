@@ -5,6 +5,7 @@ importScripts(
   '../common/filter-core.js',
   '../common/defaults.js',
   '../common/store.js',
+  '../common/textdup.js',
   './llm.js',
   './phash.js'
 );
@@ -97,6 +98,14 @@ async function embedTexts(texts) {
     return texts.map(function () { return null; });
   }
 }
+// 缓存「屏蔽」样例的 n-gram 集合（近重复层用；样例变了才重算）
+let dupCache = { key: null, sets: [] };
+function dupSets(blockTexts) {
+  const key = blockTexts.join('');
+  if (dupCache.key === key) return dupCache.sets;
+  dupCache = { key: key, sets: blockTexts.map(function (t) { return NS.textdup.ngrams(t); }) };
+  return dupCache.sets;
+}
 // 缓存「屏蔽/正常」样例的文本向量（按样例内容签名，变了才重算）
 let semCache = { key: null, block: [], allow: [] };
 async function sampleVectors(examples) {
@@ -130,6 +139,19 @@ function meanVec(vecs) {
   for (let j = 0; j < vecs.length; j++) for (let i = 0; i < d; i++) mu[i] += vecs[j][i];
   for (let i = 0; i < d; i++) mu[i] /= vecs.length;
   return mu;
+}
+// 第 k 近样本的余弦：要求至少 k 条屏蔽样例都达到该相似度，才算"像"。
+// 比只取最近一条(maxCos)更抗小样本单条巧合——一条恰好很像不会触发。
+function kthCos(q, list, k) {
+  if (!list.length) return -1;
+  const cs = list.map(function (s) { return cosine(q, s); }).sort(function (a, b) { return b - a; });
+  return cs[Math.min(k, cs.length) - 1];
+}
+function median(arr) {
+  const a = arr.slice().sort(function (x, y) { return x - y; });
+  const n = a.length;
+  if (!n) return 0;
+  return n % 2 ? a[(n - 1) / 2] : (a[n / 2 - 1] + a[n / 2]) / 2;
 }
 // 去均值 + 重新归一化：消除句向量各向异性（所有文本共享的公共方向）
 function centerNorm(v, mu) {
@@ -256,35 +278,48 @@ async function handleClassify(items) {
     }
   }
 
-  // 语义聚类屏蔽（文本）：本地 embedding + 最近邻。距离 < 阈值 且更像"屏蔽样例"则屏蔽。
+  // 文本刷屏屏蔽（两层）：① 近重复查复读（零模型）② 语义 embedding 查改写
   if (semOn) {
     const sem = settings.semantic;
     const examples = await NS.store.getExamples();
-    const blockCount = examples.filter(function (e) { return e.label === 'block'; }).length;
-    if (blockCount >= (sem.minSamples || 5)) {
-      const textItems = missItems.filter(function (i) {
-        return !(i.images && i.images.length) && (i.text || '').trim().length >= 2;
+    const blockTexts = examples.filter(function (e) { return e.label === 'block'; }).map(function (e) { return e.text; });
+    const textItems = missItems.filter(function (i) {
+      return !(i.images && i.images.length) && (i.text || '').trim().length >= 2;
+    });
+    if (blockTexts.length && textItems.length) {
+      // ---- 第1层：文本近重复（复读/变体，n-gram，纯本地，只需 ≥1 样例）----
+      const sets = dupSets(blockTexts);
+      const dupThr = sem.dupThreshold != null ? sem.dupThreshold : 0.5;
+      textItems.forEach(function (it) {
+        if (NS.textdup.score(it.text, sets) >= dupThr) fresh[it.id] = true;
       });
-      if (textItems.length) {
+      const rest = textItems.filter(function (i) { return !(i.id in fresh); });
+
+      // ---- 第2层：语义 embedding（改写спам，需 ≥ minSamples）----
+      if (rest.length && blockTexts.length >= (sem.minSamples || 5)) {
         const sv = await sampleVectors(examples);
         if (sv.block.length) {
-          const embs = await embedTexts(textItems.map(function (i) { return (i.text || '').slice(0, 300); }));
+          const embs = await embedTexts(rest.map(function (i) { return (i.text || '').slice(0, 300); }));
           const valid = embs.filter(Boolean);
-          // 背景均值 ≈ 正常评论方向：用这批评论估计各向异性公共方向，从所有向量里减掉再比
-          const mu = meanVec(valid.length >= 3 ? valid : valid.concat(sv.block));
+          const mu = meanVec(valid.length >= 3 ? valid : valid.concat(sv.block)); // 背景均值，消各向异性
           const blockC = sv.block.map(function (v) { return centerNorm(v, mu); });
           const allowC = sv.allow.map(function (v) { return centerNorm(v, mu); });
-          textItems.forEach(function (it, idx) {
-            const v = embs[idx];
-            if (!v) return;
-            const cv = centerNorm(v, mu);
-            const simB = maxCos(cv, blockC);
+          const kB = Math.max(1, Math.min(sem.knn || 1, blockC.length));
+          const cvs = embs.map(function (v) { return v ? centerNorm(v, mu) : null; });
+          const sB = cvs.map(function (cv) { return cv ? kthCos(cv, blockC, kB) : -Infinity; });
+          const finite = sB.filter(function (x) { return isFinite(x); });
+          const baseline = finite.length ? median(finite) : 0; // 批次基线自动校准
+          const minConf = sem.minConfidence != null ? sem.minConfidence : 0.25;
+          rest.forEach(function (it, idx) {
+            const cv = cvs[idx];
+            if (!cv) return;
+            const sim = sB[idx];
             const simA = allowC.length ? maxCos(cv, allowC) : -1;
-            if ((1 - simB) < sem.threshold && simB >= simA) fresh[it.id] = true;
+            if ((1 - sim) < sem.threshold && (sim - baseline) >= minConf && sim >= simA) fresh[it.id] = true;
           });
-          missItems = missItems.filter(function (i) { return !(i.id in fresh); });
         }
       }
+      missItems = missItems.filter(function (i) { return !(i.id in fresh); });
     }
   }
 

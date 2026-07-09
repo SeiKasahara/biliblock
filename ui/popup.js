@@ -30,7 +30,7 @@
     refreshSemantic();
   }
 
-  // 语义相似屏蔽：阈值滑块 + 样例是否充足
+  // 文本刷屏屏蔽：阈值滑块 + 样例状态（近重复层只需 ≥1 样例，语义层需 ≥minSamples）
   async function refreshSemantic() {
     if (!settings.semantic) settings.semantic = { threshold: 0, minSamples: 5 };
     const th = settings.semantic.threshold || 0;
@@ -39,10 +39,10 @@
     const ex = await NS.store.getExamples();
     const blockN = ex.filter(function (e) { return e.label === 'block'; }).length;
     const min = settings.semantic.minSamples || 5;
-    const enough = blockN >= min;
-    $('semTag').textContent = enough ? ('样例 ' + blockN) : ('样例不足 ' + blockN + '/' + min);
-    $('semTag').style.color = enough ? '' : '#e8a33d';
-    $('semThreshold').disabled = !enough;
+    $('semThreshold').disabled = blockN < 1;
+    if (blockN < 1) { $('semTag').textContent = '无样例'; $('semTag').style.color = '#e8a33d'; }
+    else if (blockN < min) { $('semTag').textContent = '样例 ' + blockN + ' · 仅复读查重'; $('semTag').style.color = '#e8a33d'; }
+    else { $('semTag').textContent = '样例 ' + blockN; $('semTag').style.color = ''; }
   }
   let semReq = false;
   $('semThreshold').addEventListener('input', function () {
@@ -53,20 +53,23 @@
     save();
   });
   $('semThreshold').addEventListener('change', async function () {
-    // 首次开启（>0）时申请 HF 权限并后台预热文本模型
-    if (Number(this.value) > 0 && !semReq) {
-      semReq = true;
-      const ok = await chrome.permissions.request({
-        origins: ['https://huggingface.co/*', 'https://*.huggingface.co/*', 'https://*.hf.co/*'],
-      }).catch(function () { return false; });
-      if (!ok) { hint('未授权 huggingface.co，语义屏蔽无法下载模型', 'err'); return; }
-      hint('正在后台下载/预热文本模型…', 'ok');
-      chrome.runtime.sendMessage({ type: 'warmText' }, function (r) {
-        if (chrome.runtime.lastError) return;
-        if (r && r.ok) hint('文本模型就绪（' + (r.backend || '') + '）', 'ok');
-        else hint('模型加载失败：' + ((r && r.error) || '详见设置'), 'err');
-      });
-    }
+    if (Number(this.value) <= 0 || semReq) return;
+    const ex = await NS.store.getExamples();
+    const blockN = ex.filter(function (e) { return e.label === 'block'; }).length;
+    const min = (settings.semantic && settings.semantic.minSamples) || 5;
+    // 样例够多才需要语义模型；否则只跑近重复层（零模型），不必下载
+    if (blockN < min) { hint('已开启（当前样例仅够复读查重，零模型零额度）', 'ok'); return; }
+    semReq = true;
+    const ok = await chrome.permissions.request({
+      origins: ['https://huggingface.co/*', 'https://*.huggingface.co/*', 'https://*.hf.co/*'],
+    }).catch(function () { return false; });
+    if (!ok) { hint('未授权，仅复读查重生效；语义层需授权 HF 下载模型', 'err'); return; }
+    hint('正在后台下载/预热文本模型…', 'ok');
+    chrome.runtime.sendMessage({ type: 'warmText' }, function (r) {
+      if (chrome.runtime.lastError) return;
+      if (r && r.ok) hint('文本模型就绪（' + (r.backend || '') + '）', 'ok');
+      else hint('模型加载失败：' + ((r && r.error) || '详见设置'), 'err');
+    });
   });
 
   // 本页已屏蔽计数：AI 分类是异步的（页面加载后几秒才陆续判完），

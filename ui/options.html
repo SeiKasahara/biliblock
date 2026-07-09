@@ -67,15 +67,18 @@
     <p class="desc">本地用 WebGPU 跑 CLIP 把图编码成向量，按"与你标过的黑/白图相似度"判定，能挡"同类但换了一张"的图。首次启用从 Hugging Face 下载模型（约几十 MB，缓存后离线），需授权访问 huggingface.co。比 pHash 重——<b>建议先用 pHash，不够再开这个</b>。全新、谁都不像的图交给上面的「识别配图（多模态）」云端兜底。</p>
 
     <h2>语义相似屏蔽（文本 · 本地 WebGPU · 进阶）</h2>
-    <div class="grid" style="grid-template-columns:260px 220px;margin-top:8px">
-      <label class="fld"><span>屏蔽阈值（语义距离 0~0.8，0=关，越大挡越多，建议 0.3~0.5）</span><input type="number" id="semThreshold2" min="0" max="0.8" step="0.02" /></label>
-      <label class="fld"><span>最少「屏蔽」样例数（不足则禁用）</span><input type="number" id="semMinSamples" min="1" max="50" /></label>
+    <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr));margin-top:8px">
+      <label class="fld"><span>① 文本近重复阈值（复读查重，0~1，越小越松，建议 0.45~0.6）</span><input type="number" id="semDupThreshold" min="0.2" max="1" step="0.02" /></label>
+      <label class="fld"><span>② 语义距离阈值（0~0.8，0=关整个文本刷屏屏蔽，建议 0.3~0.5）</span><input type="number" id="semThreshold2" min="0" max="0.8" step="0.02" /></label>
+      <label class="fld"><span>② 置信度下限（比正常基线高多少才屏蔽，抗小样本误伤，建议 0.2~0.35）</span><input type="number" id="semMinConfidence" min="0" max="1" step="0.05" /></label>
+      <label class="fld"><span>② 语义取第 k 近（1=提召回，2=更稳）</span><input type="number" id="semKnn" min="1" max="5" step="1" /></label>
+      <label class="fld"><span>② 最少「屏蔽」样例数（语义层不足则禁用；近重复层只需 ≥1）</span><input type="number" id="semMinSamples" min="1" max="50" /></label>
     </div>
     <div class="btnbar">
       <button id="warmTextBtn" class="primary">下载并预热文本模型</button>
       <span class="desc" id="semStat"></span>
     </div>
-    <p class="desc">本地中文文本模型（bge-small-zh）把评论与你的「🚫 屏蔽样例」编码成向量，语义距离低于阈值即自动屏蔽（同时避开与「✓ 正常」样例相近的）。首次启用从 Hugging Face 下载（约 24MB，缓存后离线），需授权 huggingface.co。阈值也能在弹窗里快速调。样例在「样例学习」里积累。</p>
+    <p class="desc">两层文本刷屏屏蔽（弹窗滑块 > 0 即开启，共用「🚫 屏蔽样例」）：<b>① 近重复</b>用字符 n-gram 查复读/变体，纯本地零模型、对正常评论几乎零误伤、只需 ≥1 条样例——专治刷屏洪流；<b>② 语义 embedding</b>用本地中文模型（bge-small-zh，首次从 HF 下约 24MB）查改写过的спам，配合置信度门槛抗小样本误伤。样例在「样例学习」里积累（点 🚫 / ✓）。</p>
   </section>
 
   <!-- 屏蔽名单 -->

@@ -44,6 +44,9 @@
     $('clipThreshold').value = (settings.imageFilter && settings.imageFilter.clipThreshold) || 0.85;
     if (!settings.semantic) settings.semantic = { threshold: 0, minSamples: 5 };
     $('semThreshold2').value = settings.semantic.threshold || 0;
+    $('semMinConfidence').value = settings.semantic.minConfidence != null ? settings.semantic.minConfidence : 0.25;
+    $('semDupThreshold').value = settings.semantic.dupThreshold != null ? settings.semantic.dupThreshold : 0.5;
+    $('semKnn').value = settings.semantic.knn || 1;
     $('semMinSamples').value = settings.semantic.minSamples || 5;
     updateImgStat();
     updateClipStat();
@@ -167,6 +170,15 @@
   function ensureSemantic() { if (!settings.semantic) settings.semantic = { threshold: 0, minSamples: 5 }; }
   $('semThreshold2').addEventListener('input', function () {
     ensureSemantic(); settings.semantic.threshold = Number(this.value) || 0; saveSettings();
+  });
+  $('semMinConfidence').addEventListener('input', function () {
+    ensureSemantic(); settings.semantic.minConfidence = Number(this.value); saveSettings();
+  });
+  $('semDupThreshold').addEventListener('input', function () {
+    ensureSemantic(); settings.semantic.dupThreshold = Number(this.value); saveSettings();
+  });
+  $('semKnn').addEventListener('input', function () {
+    ensureSemantic(); settings.semantic.knn = Math.max(1, Number(this.value) || 1); saveSettings();
   });
   $('semMinSamples').addEventListener('input', function () {
     ensureSemantic(); settings.semantic.minSamples = Number(this.value) || 5; saveSettings(); updateSemStat();
