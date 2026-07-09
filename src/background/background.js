@@ -123,6 +123,24 @@ function maxCos(q, list) {
   for (let i = 0; i < list.length; i++) { const c = cosine(q, list[i]); if (c > m) m = c; }
   return m;
 }
+function meanVec(vecs) {
+  if (!vecs.length) return null;
+  const d = vecs[0].length;
+  const mu = new Array(d).fill(0);
+  for (let j = 0; j < vecs.length; j++) for (let i = 0; i < d; i++) mu[i] += vecs[j][i];
+  for (let i = 0; i < d; i++) mu[i] /= vecs.length;
+  return mu;
+}
+// 去均值 + 重新归一化：消除句向量各向异性（所有文本共享的公共方向）
+function centerNorm(v, mu) {
+  if (!mu) return v;
+  const c = new Array(v.length);
+  let n = 0;
+  for (let i = 0; i < v.length; i++) { c[i] = v[i] - mu[i]; n += c[i] * c[i]; }
+  n = Math.sqrt(n) || 1;
+  for (let i = 0; i < c.length; i++) c[i] /= n;
+  return c;
+}
 
 chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
   if (!msg) return false;
@@ -251,11 +269,17 @@ async function handleClassify(items) {
         const sv = await sampleVectors(examples);
         if (sv.block.length) {
           const embs = await embedTexts(textItems.map(function (i) { return (i.text || '').slice(0, 300); }));
+          const valid = embs.filter(Boolean);
+          // 背景均值 ≈ 正常评论方向：用这批评论估计各向异性公共方向，从所有向量里减掉再比
+          const mu = meanVec(valid.length >= 3 ? valid : valid.concat(sv.block));
+          const blockC = sv.block.map(function (v) { return centerNorm(v, mu); });
+          const allowC = sv.allow.map(function (v) { return centerNorm(v, mu); });
           textItems.forEach(function (it, idx) {
             const v = embs[idx];
             if (!v) return;
-            const simB = maxCos(v, sv.block);
-            const simA = sv.allow.length ? maxCos(v, sv.allow) : -1;
+            const cv = centerNorm(v, mu);
+            const simB = maxCos(cv, blockC);
+            const simA = allowC.length ? maxCos(cv, allowC) : -1;
             if ((1 - simB) < sem.threshold && simB >= simA) fresh[it.id] = true;
           });
           missItems = missItems.filter(function (i) { return !(i.id in fresh); });
