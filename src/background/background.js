@@ -99,12 +99,13 @@ async function embedTexts(texts) {
   }
 }
 // 缓存「屏蔽」样例的 n-gram 集合（近重复层用；样例变了才重算）
-let dupCache = { key: null, sets: [] };
-function dupSets(blockTexts) {
-  const key = blockTexts.join('');
-  if (dupCache.key === key) return dupCache.sets;
-  dupCache = { key: key, sets: blockTexts.map(function (t) { return NS.textdup.ngrams(t); }) };
-  return dupCache.sets;
+const dupCaches = {};
+function dupSets(texts, tag) {
+  const key = tag + ':' + texts.length + ':' + texts.join('\u0001');
+  const c = dupCaches[tag];
+  if (c && c.key === key) return c.sets;
+  dupCaches[tag] = { key: key, sets: texts.map(function (t) { return NS.textdup.ngrams(t); }) };
+  return dupCaches[tag].sets;
 }
 // 缓存「屏蔽/正常」样例的文本向量（按样例内容签名，变了才重算）
 let semCache = { key: null, block: [], allow: [] };
@@ -288,10 +289,16 @@ async function handleClassify(items) {
     });
     if (blockTexts.length && textItems.length) {
       // ---- 第1层：文本近重复（复读/变体，n-gram，纯本地，只需 ≥1 样例）----
-      const sets = dupSets(blockTexts);
+      const blkSets = dupSets(blockTexts, "b");
+      const allowTexts = examples.filter(function (e) { return e.label === "allow"; }).map(function (e) { return e.text; });
+      const alwSets = allowTexts.length ? dupSets(allowTexts, "a") : [];
       const dupThr = sem.dupThreshold != null ? sem.dupThreshold : 0.5;
       textItems.forEach(function (it) {
-        if (NS.textdup.score(it.text, sets) >= dupThr) fresh[it.id] = true;
+        const sb = NS.textdup.score(it.text, blkSets);
+        if (sb >= dupThr) {
+          const sa = alwSets.length ? NS.textdup.score(it.text, alwSets) : 0;
+          if (sb > sa) fresh[it.id] = true; // 更像屏蔽样例才挡（✓ 标过正常的近重复会放行）
+        }
       });
       const rest = textItems.filter(function (i) { return !(i.id in fresh); });
 

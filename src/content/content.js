@@ -285,6 +285,7 @@
       if (text) await NS.store.addExample({ text: text, label: 'allow' });
       learnImages(info, 'allow'); // 配图入白库，压制误杀
       S.cacheMem.set(key, false);
+      try { await NS.store.putCache({ [key]: false }); } catch (e) {} // 持久化，避免刷新后又从缓存判黑
       window.postMessage({ __bcp: 'cache', entries: [[key, false]] }, '*');
       if (info.el) unhide(info.el);
       toast('已记为「正常」，将减少此类误屏蔽');
